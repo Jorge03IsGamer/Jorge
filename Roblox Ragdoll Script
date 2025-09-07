@@ -1,0 +1,65 @@
+-- LocalScript inside StarterPlayerScripts
+local player = game.Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+local humanoid = char:WaitForChild("Humanoid")
+
+-- Drift variables
+local speed = 50 -- drift speed
+local driftVelocity = Vector3.new(0,0,0)
+local drifting = false
+
+-- Create a ScreenGui with button to toggle drifting
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "DriftGui"
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0,200,0,50)
+toggleBtn.Position = UDim2.new(0.5,-100,0.9,0)
+toggleBtn.Text = "Ragdoll"
+toggleBtn.Parent = gui
+
+-- Input detection
+local uis = game:GetService("UserInputService")
+local moveDir = Vector3.new(0,0,0)
+
+uis.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode.W then moveDir = Vector3.new(0,0,-1) end
+	if input.KeyCode == Enum.KeyCode.S then moveDir = Vector3.new(0,0,1) end
+	if input.KeyCode == Enum.KeyCode.A then moveDir = Vector3.new(-1,0,0) end
+	if input.KeyCode == Enum.KeyCode.D then moveDir = Vector3.new(1,0,0) end
+	if input.KeyCode == Enum.KeyCode.Space then moveDir = Vector3.new(0,1,0) end
+	if input.KeyCode == Enum.KeyCode.LeftShift then moveDir = Vector3.new(0,-1,0) end
+end)
+
+uis.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.W or
+	   input.KeyCode == Enum.KeyCode.S or
+	   input.KeyCode == Enum.KeyCode.A or
+	   input.KeyCode == Enum.KeyCode.D or
+	   input.KeyCode == Enum.KeyCode.Space or
+	   input.KeyCode == Enum.KeyCode.LeftShift then
+		moveDir = Vector3.new(0,0,0)
+	end
+end)
+
+-- Toggle drifting
+toggleBtn.MouseButton1Click:Connect(function()
+	drifting = not drifting
+	if drifting then
+		humanoid.PlatformStand = true
+	else
+		humanoid.PlatformStand = false
+		hrp.Velocity = Vector3.new(0,0,0)
+	end
+end)
+
+-- Update drift every frame
+game:GetService("RunService").RenderStepped:Connect(function(dt)
+	if drifting then
+		local cam = workspace.CurrentCamera
+		local dir = (cam.CFrame:VectorToWorldSpace(moveDir)).Unit
+		hrp.Velocity = dir * speed
+	end
+end)
