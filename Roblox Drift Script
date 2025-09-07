@@ -1,0 +1,56 @@
+-- LocalScript inside StarterPlayerScripts
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local workspace = game:GetService("Workspace")
+
+-- Create the drift tool
+local tool = Instance.new("Tool")
+tool.Name = "DriftTool"
+tool.RequiresHandle = false
+tool.Parent = player.Backpack
+
+-- Save original friction values
+local originalFriction = {}
+local drifting = false
+
+-- Function to make everything slippery
+local function makeEverythingSlippery()
+	for _, part in ipairs(workspace:GetDescendants()) do
+		if part:IsA("BasePart") and part.Anchored == false then
+			if not originalFriction[part] then
+				originalFriction[part] = part.CustomPhysicalProperties
+			end
+			part.CustomPhysicalProperties = PhysicalProperties.new(
+				0.05,   -- Friction (ice)
+				0.3, -- Elasticity
+				0,   -- FrictionWeight
+				100, -- ElasticityWeight
+				1    -- Density
+			)
+		end
+	end
+end
+
+-- Function to restore original properties
+local function restoreFriction()
+	for part, props in pairs(originalFriction) do
+		if part and part:IsA("BasePart") then
+			part.CustomPhysicalProperties = props
+		end
+	end
+	originalFriction = {}
+end
+
+-- Handle tool equip/unequip
+tool.Equipped:Connect(function()
+	drifting = true
+	while drifting do
+		makeEverythingSlippery()
+		task.wait(1) -- update every second for new parts
+	end
+end)
+
+tool.Unequipped:Connect(function()
+	drifting = false
+	restoreFriction()
+end)
