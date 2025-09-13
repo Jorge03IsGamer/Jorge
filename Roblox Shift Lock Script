@@ -1,0 +1,187 @@
+-- Smooth Shift Lock + Crosshair Switcher + Color Modes
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Crosshairs list (only working symbols)
+local crosshairs = {"¤","⊕","☆","×"}
+local crosshairIndex = 1
+
+-- Color modes
+local colorModes = {
+	"Red","Orange","Yellow","Green","Lime","Cyan","Blue","Violet",
+	"Purple","Pink","White","Brown","Black",
+	"Light Rainbow","Rainbow","Dark Rainbow",
+	"Light Monochrome","Monochrome"
+}
+local colorIndex = 1
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Frame (draggable container)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 160) -- bigger for 3 buttons
+mainFrame.Position = UDim2.new(0, 20, 0, 200)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 2
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+-- Shift Lock button
+local shiftButton = Instance.new("TextButton")
+shiftButton.Size = UDim2.new(0.9, 0, 0.25, 0)
+shiftButton.Position = UDim2.new(0.05, 0, 0.05, 0)
+shiftButton.BackgroundColor3 = Color3.fromRGB(40, 40, 200)
+shiftButton.TextColor3 = Color3.new(1, 1, 1)
+shiftButton.Text = "Shift Lock: OFF"
+shiftButton.Parent = mainFrame
+
+-- Crosshair switch button
+local crosshairButton = Instance.new("TextButton")
+crosshairButton.Size = UDim2.new(0.9, 0, 0.25, 0)
+crosshairButton.Position = UDim2.new(0.05, 0, 0.35, 0)
+crosshairButton.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+crosshairButton.TextColor3 = Color3.new(1, 1, 1)
+crosshairButton.Text = "Crosshair: " .. crosshairs[crosshairIndex]
+crosshairButton.Parent = mainFrame
+
+-- Crosshair color button
+local colorButton = Instance.new("TextButton")
+colorButton.Size = UDim2.new(0.9, 0, 0.25, 0)
+colorButton.Position = UDim2.new(0.05, 0, 0.65, 0)
+colorButton.BackgroundColor3 = Color3.fromRGB(40, 200, 40)
+colorButton.TextColor3 = Color3.new(1, 1, 1)
+colorButton.Text = "Color: " .. colorModes[colorIndex]
+colorButton.Parent = mainFrame
+
+-- Crosshair display
+local crosshair = Instance.new("TextLabel")
+crosshair.Size = UDim2.new(0, 40, 0, 40)
+crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+crosshair.Position = UDim2.new(0.5, 0, 0.5, 0)
+crosshair.BackgroundTransparency = 1
+crosshair.Text = crosshairs[crosshairIndex]
+crosshair.TextColor3 = Color3.fromRGB(255, 255, 255)
+crosshair.TextScaled = true
+crosshair.Visible = false
+crosshair.Parent = screenGui
+
+-- State
+local shiftLockEnabled = false
+
+-- Toggle shift lock
+shiftButton.MouseButton1Click:Connect(function()
+	shiftLockEnabled = not shiftLockEnabled
+	shiftButton.Text = shiftLockEnabled and "Shift Lock: ON" or "Shift Lock: OFF"
+	crosshair.Visible = shiftLockEnabled
+end)
+
+-- Switch crosshair
+crosshairButton.MouseButton1Click:Connect(function()
+	crosshairIndex = crosshairIndex % #crosshairs + 1
+	crosshair.Text = crosshairs[crosshairIndex]
+	crosshairButton.Text = "Crosshair: " .. crosshairs[crosshairIndex]
+end)
+
+-- Switch color mode
+colorButton.MouseButton1Click:Connect(function()
+	colorIndex = colorIndex % #colorModes + 1
+	colorButton.Text = "Color: " .. colorModes[colorIndex]
+end)
+
+-- Helpers for rainbow + monochrome
+local rainbowColors = {
+	Color3.fromRGB(255,0,0),
+	Color3.fromRGB(255,128,0),
+	Color3.fromRGB(255,255,0),
+	Color3.fromRGB(0,255,0),
+	Color3.fromRGB(0,255,128),
+	Color3.fromRGB(0,255,255),
+	Color3.fromRGB(0,128,255),
+	Color3.fromRGB(128,0,255),
+	Color3.fromRGB(255,0,255),
+	Color3.fromRGB(255,0,128)
+}
+local rainbowIndex = 1
+local rainbowTimer = 0
+local monochromeValue = 0
+local monochromeDirection = 1
+
+-- Color updater
+RunService.RenderStepped:Connect(function(dt)
+	if crosshair.Visible then
+		local mode = colorModes[colorIndex]
+		if mode == "Red" then
+			crosshair.TextColor3 = Color3.fromRGB(255,0,0)
+		elseif mode == "Orange" then
+			crosshair.TextColor3 = Color3.fromRGB(255,128,0)
+		elseif mode == "Yellow" then
+			crosshair.TextColor3 = Color3.fromRGB(255,255,0)
+		elseif mode == "Green" then
+			crosshair.TextColor3 = Color3.fromRGB(0,128,0)
+		elseif mode == "Lime" then
+			crosshair.TextColor3 = Color3.fromRGB(0,255,0)
+		elseif mode == "Cyan" then
+			crosshair.TextColor3 = Color3.fromRGB(0,255,255)
+		elseif mode == "Blue" then
+			crosshair.TextColor3 = Color3.fromRGB(0,0,255)
+		elseif mode == "Violet" then
+			crosshair.TextColor3 = Color3.fromRGB(128,0,255)
+		elseif mode == "Purple" then
+			crosshair.TextColor3 = Color3.fromRGB(200,0,200)
+		elseif mode == "Pink" then
+			crosshair.TextColor3 = Color3.fromRGB(255,0,128)
+		elseif mode == "White" then
+			crosshair.TextColor3 = Color3.fromRGB(255,255,255)
+		elseif mode == "Brown" then
+			crosshair.TextColor3 = Color3.fromRGB(139,69,19)
+		elseif mode == "Black" then
+			crosshair.TextColor3 = Color3.fromRGB(0,0,0)
+		elseif mode:find("Rainbow") then
+			rainbowTimer = rainbowTimer + dt
+			if rainbowTimer >= 0.1 then
+				rainbowTimer = 0
+				rainbowIndex = rainbowIndex % #rainbowColors + 1
+				local c = rainbowColors[rainbowIndex]
+				if mode == "Light Rainbow" then
+					crosshair.TextColor3 = c:Lerp(Color3.new(1,1,1),0.5)
+				elseif mode == "Rainbow" then
+					crosshair.TextColor3 = c
+				elseif mode == "Dark Rainbow" then
+					crosshair.TextColor3 = c:Lerp(Color3.new(0,0,0),0.5)
+				end
+			end
+		elseif mode:find("Monochrome") then
+			monochromeValue = monochromeValue + (dt * 0.5 * monochromeDirection)
+			if monochromeValue > 1 then monochromeValue, monochromeDirection = 1, -1 end
+			if monochromeValue < 0 then monochromeValue, monochromeDirection = 0, 1 end
+			local c = Color3.new(monochromeValue,monochromeValue,monochromeValue)
+			if mode == "Light Monochrome" then
+				c = c:Lerp(Color3.new(1,1,1),0.5)
+			end
+			crosshair.TextColor3 = c
+		end
+	end
+end)
+
+-- Update loop for shift lock movement
+RunService.RenderStepped:Connect(function()
+	if shiftLockEnabled then
+		local character = player.Character
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			local root = character.HumanoidRootPart
+			local lookVector = camera.CFrame.LookVector
+			local lookAt = root.Position + Vector3.new(lookVector.X,0,lookVector.Z)
+			root.CFrame = CFrame.new(root.Position, lookAt)
+
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CFrame = camera.CFrame * CFrame.new(3, 0, 0)
+		end
+	end
+end)
