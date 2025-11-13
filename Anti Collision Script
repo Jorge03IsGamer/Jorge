@@ -1,0 +1,43 @@
+-- LocalScript inside StarterGui
+
+-- Create draggable button
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AntiFlingGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0, 150, 0, 50)
+Button.Position = UDim2.new(0.05, 0, 0.1, 0)
+Button.Text = "Anti-Fling: OFF"
+Button.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button.Font = Enum.Font.GothamBold
+Button.TextSize = 18
+Button.Active = true
+Button.Draggable = true
+Button.Parent = ScreenGui
+
+local enabled = false
+
+local function setCollisions(enabledState)
+	for _, part in ipairs(workspace:GetDescendants()) do
+		if part:IsA("BasePart") and not part.Anchored then
+			part.CanCollide = enabledState
+		end
+	end
+end
+
+Button.MouseButton1Click:Connect(function()
+	enabled = not enabled
+
+	if enabled then
+		setCollisions(false)
+		Button.Text = "Anti-Fling: ON"
+		Button.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+	else
+		setCollisions(true)
+		Button.Text = "Anti-Fling: OFF"
+		Button.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+	end
+end)
