@@ -1,0 +1,241 @@
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// COLORS
+local COLOR_DEFAULT = Color3.fromRGB(0,255,0)
+local COLOR_GUN = Color3.fromRGB(0,170,255)
+local COLOR_KNIFE = Color3.fromRGB(255,0,0)
+
+--// STATES
+local ESP_ENABLED = false
+local AIMBOT_ENABLED = false
+local FOCUS_GUN = false
+local FOCUS_KNIFE = false
+local MANUAL_FOCUS = false
+
+--// STORAGE
+local Highlights = {}
+local Labels = {}
+local WeaponCache = {}
+
+--// GUI
+local gui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromOffset(260,260)
+frame.Position = UDim2.fromScale(0.02,0.35)
+frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+frame.Active = true
+frame.Draggable = true
+Instance.new("UICorner", frame)
+
+local function createButton(text, y)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(1,-20,0,34)
+    b.Position = UDim2.new(0,10,0,y)
+    b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    b.Text = text
+    Instance.new("UICorner", b)
+    return b
+end
+
+local espBtn = createButton("ESP: OFF",15)
+local aimBtn = createButton("ESP + AIMBOT: OFF",55)
+local gunBtn = createButton("FOCUS GUN: OFF",95)
+local knifeBtn = createButton("FOCUS KNIFE: OFF",135)
+
+local credit = Instance.new("TextLabel", frame)
+credit.Size = UDim2.new(1,0,0,20)
+credit.Position = UDim2.new(0,0,1,-22)
+credit.BackgroundTransparency = 1
+credit.Text = "By Jorge03IsGamer"
+credit.TextColor3 = Color3.fromRGB(150,150,150)
+credit.Font = Enum.Font.Gotham
+credit.TextSize = 12
+
+--// DETECT WEAPON
+local function detectWeapon(player)
+    local char = player.Character
+    if not char then return nil end
+
+    local function checkTools(parent)
+        for _, t in ipairs(parent:GetChildren()) do
+            if t:IsA("Tool") then
+                local name = t.Name:lower()
+                if name:find("gun") then return "gun" end
+                if name:find("knife") then return "knife" end
+            end
+        end
+        return nil
+    end
+
+    local w = checkTools(char) or (player:FindFirstChild("Backpack") and checkTools(player.Backpack))
+    WeaponCache[player] = w
+    return w
+end
+
+--// CREATE ESP & LABEL
+local function createESP(player)
+    local char = player.Character
+    if not char or not char:FindFirstChild("Head") then return end
+    if Highlights[player] then return end
+
+    local hl = Instance.new("Highlight")
+    hl.Adornee = char
+    hl.FillTransparency = 0.5
+    hl.OutlineTransparency = 0.5
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent = char
+    Highlights[player] = hl
+
+    local lbl = Instance.new("BillboardGui", char.Head)
+    lbl.Size = UDim2.fromOffset(200,30)
+    lbl.StudsOffset = Vector3.new(0,2.4,0)
+    lbl.AlwaysOnTop = true
+    local t = Instance.new("TextLabel", lbl)
+    t.Size = UDim2.fromScale(1,1)
+    t.BackgroundTransparency = 1
+    t.TextStrokeTransparency = 0
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 14
+    Labels[player] = t
+end
+
+--// HANDLE PLAYER
+local function handlePlayer(player)
+    player.CharacterAdded:Connect(function()
+        wait(0.1)
+        createESP(player)
+        WeaponCache[player] = nil
+        if player == LocalPlayer and not MANUAL_FOCUS then
+            FOCUS_GUN = false
+            FOCUS_KNIFE = false
+        end
+    end)
+    if player.Character then createESP(player) end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do handlePlayer(p) end
+Players.PlayerAdded:Connect(handlePlayer)
+
+--// VISIBILITY
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+rayParams.IgnoreWater = true
+local function visible(head)
+    if not head or not head.Parent or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    local r = workspace:Raycast(LocalPlayer.Character.Head.Position, head.Position - LocalPlayer.Character.Head.Position, rayParams)
+    return not r or r.Instance:IsDescendantOf(head.Parent)
+end
+
+--// GET TARGET
+local function getTarget()
+    local closest, bestDist = nil, math.huge
+    for p, hl in pairs(Highlights) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 and visible(head) then
+                local w = detectWeapon(p)
+                if (FOCUS_GUN and w ~= "gun") or (FOCUS_KNIFE and w ~= "knife") then continue end
+                local d = (head.Position - Camera.CFrame.Position).Magnitude
+                if d < bestDist then bestDist = d closest = head end
+            end
+        end
+    end
+    return closest
+end
+
+--// UPDATE WEAPONS & ESP
+spawn(function()
+    while wait(1) do
+        for _, player in ipairs(Players:GetPlayers()) do
+            detectWeapon(player)
+        end
+    end
+end)
+
+--// MAIN LOOP
+RunService.RenderStepped:Connect(function()
+    for p, hl in pairs(Highlights) do
+        if not p.Character or not p.Character:FindFirstChild("Head") then
+            hl:Destroy()
+            Highlights[p] = nil
+            if Labels[p] then Labels[p]:Destroy() Labels[p]=nil end
+        else
+            local head = p.Character.Head
+            local lbl = Labels[p]
+            local dist = math.floor((head.Position - Camera.CFrame.Position).Magnitude)
+            if lbl then
+                lbl.Text = "[@ "..p.Name.." | "..dist.." Studs]"
+            end
+            local w = WeaponCache[p] or detectWeapon(p)
+            if w == "gun" then hl.FillColor = COLOR_GUN
+            elseif w == "knife" then hl.FillColor = COLOR_KNIFE
+            else hl.FillColor = COLOR_DEFAULT end
+        end
+    end
+
+    -- Auto focus knife if you have gun (only if not manual)
+    if AIMBOT_ENABLED and not MANUAL_FOCUS then
+        local myWeapon = WeaponCache[LocalPlayer] or detectWeapon(LocalPlayer)
+        if myWeapon == "gun" then
+            FOCUS_KNIFE = true
+            FOCUS_GUN = false
+        end
+    end
+
+    -- AIMBOT
+    if AIMBOT_ENABLED and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+        local t = getTarget()
+        if t then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Position)
+        end
+    end
+end)
+
+--// BUTTONS
+espBtn.MouseButton1Click:Connect(function()
+    ESP_ENABLED = not ESP_ENABLED
+    if ESP_ENABLED or AIMBOT_ENABLED then
+        for _, p in ipairs(Players:GetPlayers()) do createESP(p) end
+    else
+        for _, hl in pairs(Highlights) do hl:Destroy() end
+        for _, lbl in pairs(Labels) do lbl:Destroy() end
+        Highlights = {}
+        Labels = {}
+    end
+    espBtn.Text = "ESP: "..(ESP_ENABLED and "ON" or "OFF")
+end)
+
+aimBtn.MouseButton1Click:Connect(function()
+    AIMBOT_ENABLED = not AIMBOT_ENABLED
+    ESP_ENABLED = ESP_ENABLED or AIMBOT_ENABLED
+    if AIMBOT_ENABLED then
+        for _, p in ipairs(Players:GetPlayers()) do createESP(p) end
+    end
+    aimBtn.Text = "ESP + AIMBOT: "..(AIMBOT_ENABLED and "ON" or "OFF")
+end)
+
+gunBtn.MouseButton1Click:Connect(function()
+    FOCUS_GUN = not FOCUS_GUN
+    if FOCUS_GUN then FOCUS_KNIFE = false end
+    MANUAL_FOCUS = true
+    gunBtn.Text = "FOCUS GUN: "..(FOCUS_GUN and "ON" or "OFF")
+    knifeBtn.Text = "FOCUS KNIFE: OFF"
+end)
+
+knifeBtn.MouseButton1Click:Connect(function()
+    FOCUS_KNIFE = not FOCUS_KNIFE
+    if FOCUS_KNIFE then FOCUS_GUN = false end
+    MANUAL_FOCUS = true
+    knifeBtn.Text = "FOCUS KNIFE: "..(FOCUS_KNIFE and "ON" or "OFF")
+    gunBtn.Text = "FOCUS GUN: OFF"
+end)
