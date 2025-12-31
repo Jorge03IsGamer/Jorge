@@ -1,0 +1,205 @@
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+--// VARIABLES
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local ENABLED = false
+
+local connections = {}
+local activeBillboards = {}
+local activeESP = {}
+
+--// CONNECTION MANAGER
+local function connect(signal, func)
+    local c = signal:Connect(func)
+    table.insert(connections, c)
+    return c
+end
+
+local function disconnectAll()
+    for _, c in ipairs(connections) do
+        if c then c:Disconnect() end
+    end
+    connections = {}
+end
+
+local function tween(inst, props, t)
+    TweenService:Create(inst, TweenInfo.new(t, Enum.EasingStyle.Quad), props):Play()
+end
+
+--// HEALTH DISPLAY
+local function createHealthDisplay(character, player)
+    if activeBillboards[character] then return end
+    local head = character:FindFirstChild("Head")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not head or not humanoid then return end
+
+    local gui = Instance.new("BillboardGui")
+    gui.Size = UDim2.new(0,220,0,70)
+    gui.StudsOffset = Vector3.new(0,2.5,0.5)
+    gui.AlwaysOnTop = true
+    gui.Adornee = head
+
+    local bg = Instance.new("Frame", gui)
+    bg.Size = UDim2.new(1,0,0.25,0)
+    bg.Position = UDim2.new(0,0,-0.35,0)
+    bg.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    bg.BorderSizePixel = 0
+
+    local fill = Instance.new("Frame", bg)
+    fill.Size = UDim2.new(1,0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(0,255,0)
+    fill.BorderSizePixel = 0
+
+    local label = Instance.new("TextLabel", gui)
+    label.Size = UDim2.new(1,0,0.6,0)
+    label.Position = UDim2.new(0,0,0.25,0)
+    label.BackgroundTransparency = 1
+    label.TextScaled = true
+    label.TextStrokeTransparency = 0
+    label.Font = Enum.Font.SourceSansBold
+
+    gui.Parent = head
+    activeBillboards[character] = gui
+
+    connect(RunService.RenderStepped, function()
+        if not ENABLED or humanoid.Health <= 0 then return end
+
+        local hp = humanoid.Health / humanoid.MaxHealth
+        local dist = math.floor((head.Position - Camera.CFrame.Position).Magnitude)
+        label.Text = player.Name.." "..math.floor(humanoid.Health).."/"..humanoid.MaxHealth.." ("..dist.." studs)"
+
+        local color =
+            hp > 0.7 and Color3.fromRGB(0,255,0) or
+            hp > 0.4 and Color3.fromRGB(255,255,0) or
+            hp > 0.2 and Color3.fromRGB(255,165,0) or
+            Color3.fromRGB(255,0,0)
+
+        label.TextColor3 = color
+        tween(fill,{Size = UDim2.new(hp,0,1,0), BackgroundColor3 = color},0.15)
+    end)
+end
+
+--// ESP
+local function addESP(character)
+    if activeESP[character] then return end
+    local h = Instance.new("Highlight")
+    h.Adornee = character
+    h.FillColor = Color3.fromRGB(0,255,0)
+    h.OutlineColor = Color3.fromRGB(0,255,0)
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = character
+    activeESP[character] = h
+end
+
+--// PLAYER SETUP
+local function setupPlayer(player)
+    if player == LocalPlayer then return end
+
+    connect(player.CharacterAdded, function(char)
+        char:WaitForChild("Head")
+        if ENABLED then
+            addESP(char)
+            createHealthDisplay(char, player)
+        end
+    end)
+
+    if player.Character and ENABLED then
+        addESP(player.Character)
+        createHealthDisplay(player.Character, player)
+    end
+end
+
+--// VISIBILITY + TARGET
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+rayParams.IgnoreWater = true
+
+local function isVisible(head)
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    local r = workspace:Raycast(Camera.CFrame.Position, head.Position - Camera.CFrame.Position, rayParams)
+    return not r or r.Instance:IsDescendantOf(head.Parent)
+end
+
+local function getNearestTarget()
+    local closest, dist = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local h = p.Character.Head
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 and isVisible(h) then
+                local d = (h.Position - Camera.CFrame.Position).Magnitude
+                if d < dist then
+                    dist, closest = d, h
+                end
+            end
+        end
+    end
+    return closest
+end
+
+--// ENABLE / DISABLE
+local function enable()
+    ENABLED = true
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        setupPlayer(p)
+    end
+
+    connect(RunService.RenderStepped, function()
+        if not ENABLED then return end
+        local t = getNearestTarget()
+        if t then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Position)
+        end
+    end)
+end
+
+local function disable()
+    ENABLED = false
+    disconnectAll()
+
+    for _, g in pairs(activeBillboards) do
+        if g then g:Destroy() end
+    end
+    for _, e in pairs(activeESP) do
+        if e then e:Destroy() end
+    end
+
+    activeBillboards = {}
+    activeESP = {}
+end
+
+--// GUI BUTTON
+local gui = Instance.new("ScreenGui")
+gui.Name = "ESPToggleGUI"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0,160,0,45)
+button.Position = UDim2.new(0.02,0,0.4,0)
+button.BackgroundColor3 = Color3.fromRGB(35,35,35)
+button.TextColor3 = Color3.new(1,1,1)
+button.Font = Enum.Font.SourceSansBold
+button.TextScaled = true
+button.Text = "ESP: OFF"
+button.Active = true
+button.Draggable = true
+button.Parent = gui
+
+button.MouseButton1Click:Connect(function()
+    if ENABLED then
+        disable()
+        button.Text = "ESP: OFF"
+        button.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    else
+        enable()
+        button.Text = "ESP: ON"
+        button.BackgroundColor3 = Color3.fromRGB(0,150,0)
+    end
+end)
