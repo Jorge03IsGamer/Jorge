@@ -1,0 +1,323 @@
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TextChatService = game:GetService("TextChatService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// CHAT
+local ChatChannel
+task.spawn(function()
+    pcall(function()
+        ChatChannel = TextChatService.TextChannels:WaitForChild("RBXGeneral")
+    end)
+end)
+
+--// COLORS
+local COLOR_SURVIVOR = Color3.fromRGB(0,255,0)
+local COLOR_GUN = Color3.fromRGB(0,170,255)
+local COLOR_KNIFE = Color3.fromRGB(255,0,0)
+
+--// STATES
+local ESP_ENABLED = false
+local AIMBOT_ENABLED = false
+local FOCUS_GUN = false
+local FOCUS_KNIFE = false
+
+--// STORAGE
+local HL = {}
+local LABELS = {}
+local LOCKED_TARGET = nil
+
+--------------------------------------------------
+-- GUI
+--------------------------------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = "MainGui"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+--------------------------------------------------
+-- WARNING FRAME
+--------------------------------------------------
+local warningFrame = Instance.new("Frame", gui)
+warningFrame.Size = UDim2.fromOffset(300,150)
+warningFrame.Position = UDim2.fromScale(0.5,0.5)
+warningFrame.AnchorPoint = Vector2.new(0.5,0.5)
+warningFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+Instance.new("UICorner", warningFrame)
+
+local warningText = Instance.new("TextLabel", warningFrame)
+warningText.Size = UDim2.new(1,-20,0,80)
+warningText.Position = UDim2.new(0,10,0,10)
+warningText.BackgroundTransparency = 1
+warningText.TextColor3 = Color3.new(1,1,1)
+warningText.Font = Enum.Font.GothamBold
+warningText.TextSize = 16
+warningText.TextWrapped = true
+warningText.Text = "⚠️ Note that this script is currently broken.\nSome features may not work properly."
+
+local continueBtn = Instance.new("TextButton", warningFrame)
+continueBtn.Size = UDim2.new(1,-20,0,35)
+continueBtn.Position = UDim2.new(0,10,1,-45)
+continueBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+continueBtn.TextColor3 = Color3.new(1,1,1)
+continueBtn.Font = Enum.Font.GothamBold
+continueBtn.TextSize = 14
+continueBtn.Text = "Continue"
+Instance.new("UICorner", continueBtn)
+
+--------------------------------------------------
+-- MAIN FRAME
+--------------------------------------------------
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromOffset(280,330)
+frame.Position = UDim2.fromScale(0.02,0.35)
+frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+frame.Active = true
+frame.Draggable = true
+frame.Visible = false
+Instance.new("UICorner", frame)
+
+local function button(text,y)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(1,-20,0,32)
+    b.Position = UDim2.new(0,10,0,y)
+    b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    b.Text = text
+    Instance.new("UICorner", b)
+    return b
+end
+
+local espBtn      = button("ESP: OFF",10)
+local aimBtn      = button("AIMBOT: OFF",50)
+local gunBtn      = button("FOCUS GUN: OFF",90)
+local knifeBtn    = button("FOCUS KNIFE: OFF",130)
+local tpGunBtn    = button("TP TO DROPPED GUN",170)
+local announceBtn = button("ANNOUNCE ROLES",210)
+
+continueBtn.MouseButton1Click:Connect(function()
+    warningFrame:Destroy()
+    frame.Visible = true
+end)
+
+--------------------------------------------------
+-- WEAPON DETECTION
+--------------------------------------------------
+local function detectWeapon(player)
+    local function scan(container)
+        if not container then return nil end
+        for _,t in ipairs(container:GetChildren()) do
+            if t:IsA("Tool") then
+                local n = t.Name:lower()
+                if n:find("gun") then return "gun" end
+                if n:find("knife") or n:find("blade") then return "knife" end
+            end
+        end
+    end
+    return scan(player.Character) or scan(player:FindFirstChild("Backpack"))
+end
+
+--------------------------------------------------
+-- DROPPED GUN
+--------------------------------------------------
+local function getDroppedGun()
+    for _,obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+            if not obj.Parent:FindFirstChildOfClass("Humanoid") then
+                return obj
+            end
+        end
+    end
+end
+
+--------------------------------------------------
+-- VISIBILITY CHECK (NO WALLS)
+--------------------------------------------------
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+rayParams.IgnoreWater = true
+
+local function isVisible(head)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then
+        return false
+    end
+
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+
+    local origin = Camera.CFrame.Position
+    local direction = head.Position - origin
+
+    local result = workspace:Raycast(origin, direction, rayParams)
+
+    if not result then return true end
+    return result.Instance:IsDescendantOf(head.Parent)
+end
+
+--------------------------------------------------
+-- ESP
+--------------------------------------------------
+local function removeESP(player)
+    if HL[player] then HL[player]:Destroy() HL[player] = nil end
+    if LABELS[player] then LABELS[player]:Destroy() LABELS[player] = nil end
+end
+
+local function createESP(player)
+    if HL[player] then return end
+    local char = player.Character
+    if not char or not char:FindFirstChild("Head") then return end
+
+    local h = Instance.new("Highlight", char)
+    h.Adornee = char
+    h.FillTransparency = 0.5
+    h.OutlineTransparency = 0.3
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    HL[player] = h
+
+    local bb = Instance.new("BillboardGui", char.Head)
+    bb.Size = UDim2.fromOffset(200,30)
+    bb.StudsOffset = Vector3.new(0,2.5,0)
+    bb.AlwaysOnTop = true
+
+    local t = Instance.new("TextLabel", bb)
+    t.Size = UDim2.fromScale(1,1)
+    t.BackgroundTransparency = 1
+    t.TextStrokeTransparency = 0
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 14
+    LABELS[player] = t
+end
+
+--------------------------------------------------
+-- TARGET
+--------------------------------------------------
+local function getTarget()
+    local best,dist = nil,math.huge
+
+    for p,_ in pairs(HL) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+
+            if isVisible(head) then
+                local w = detectWeapon(p)
+
+                if (FOCUS_GUN and w ~= "gun") or (FOCUS_KNIFE and w ~= "knife") then
+                    continue
+                end
+
+                local d = (head.Position - Camera.CFrame.Position).Magnitude
+                if d < dist then
+                    dist = d
+                    best = head
+                end
+            end
+        end
+    end
+
+    return best
+end
+
+--------------------------------------------------
+-- LOOP
+--------------------------------------------------
+RunService.RenderStepped:Connect(function()
+
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if ESP_ENABLED then createESP(p) else removeESP(p) end
+        end
+    end
+
+    for p,h in pairs(HL) do
+        if not p.Character then removeESP(p) continue end
+        local w = detectWeapon(p)
+        local l = LABELS[p]
+
+        if l then
+            if w == "gun" then
+                h.FillColor = COLOR_GUN
+                l.Text = "@"..p.Name.." | Sheriff"
+            elseif w == "knife" then
+                h.FillColor = COLOR_KNIFE
+                l.Text = "@"..p.Name.." | Murderer"
+            else
+                h.FillColor = COLOR_SURVIVOR
+                l.Text = "@"..p.Name.." | Survivor"
+            end
+        end
+    end
+
+    if AIMBOT_ENABLED then
+        LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+
+        if LOCKED_TARGET then
+            if not LOCKED_TARGET.Parent or not isVisible(LOCKED_TARGET) then
+                LOCKED_TARGET = nil
+            end
+        end
+
+        if not LOCKED_TARGET then
+            LOCKED_TARGET = getTarget()
+        end
+
+        if LOCKED_TARGET then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, LOCKED_TARGET.Position)
+        end
+    else
+        LocalPlayer.CameraMode = Enum.CameraMode.Classic
+        LOCKED_TARGET = nil
+    end
+end)
+
+--------------------------------------------------
+-- BUTTONS
+--------------------------------------------------
+espBtn.MouseButton1Click:Connect(function()
+    ESP_ENABLED = not ESP_ENABLED
+    espBtn.Text = "ESP: "..(ESP_ENABLED and "ON" or "OFF")
+end)
+
+aimBtn.MouseButton1Click:Connect(function()
+    AIMBOT_ENABLED = not AIMBOT_ENABLED
+    aimBtn.Text = "AIMBOT: "..(AIMBOT_ENABLED and "ON" or "OFF")
+end)
+
+gunBtn.MouseButton1Click:Connect(function()
+    FOCUS_GUN = not FOCUS_GUN
+    FOCUS_KNIFE = false
+    gunBtn.Text = "FOCUS GUN: "..(FOCUS_GUN and "ON" or "OFF")
+    knifeBtn.Text = "FOCUS KNIFE: OFF"
+end)
+
+knifeBtn.MouseButton1Click:Connect(function()
+    FOCUS_KNIFE = not FOCUS_KNIFE
+    FOCUS_GUN = false
+    knifeBtn.Text = "FOCUS KNIFE: "..(FOCUS_KNIFE and "ON" or "OFF")
+    gunBtn.Text = "FOCUS GUN: OFF"
+end)
+
+tpGunBtn.MouseButton1Click:Connect(function()
+    local gun = getDroppedGun()
+    local c = LocalPlayer.Character
+    if gun and c and c:FindFirstChild("HumanoidRootPart") then
+        c.HumanoidRootPart.CFrame = gun.Handle.CFrame * CFrame.new(0,3,0)
+    end
+end)
+
+announceBtn.MouseButton1Click:Connect(function()
+    if not ChatChannel then return end
+    for _,p in ipairs(Players:GetPlayers()) do
+        local w = detectWeapon(p)
+        if w == "gun" then
+            ChatChannel:SendAsync("🔫 Sheriff: "..p.Name)
+        elseif w == "knife" then
+            ChatChannel:SendAsync("🗡 Murderer: "..p.Name)
+        end
+    end
+end)
+
+print("FINAL CLEAN SCRIPT (NO WALL AIM + LOCK FIX) 🔥")
